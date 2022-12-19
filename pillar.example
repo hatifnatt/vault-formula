@@ -1,0 +1,171 @@
+---
+vault:
+  # NOTE: usually package version in repository looks like 1.12.2-1
+  # so you need to change version string respectively i.e. like
+  # version: '1.12.2-1'
+  # or
+  # version: '1.12.2*'
+  version: 1.12.2
+  # control via pillar will Vault be installed or not
+  # NOTE: default is false!
+  install: false
+  # Installation method selection
+  # package, repo - configure official repository (available for Debian and RedHat like systems), then install package
+  # binary, archive - download and install precompiled binary from official server or from salt fileserver
+  use_upstream: binary
+  user: vault
+  group: vault
+  root_user: root
+  root_group: root
+  bin: /usr/bin/vault
+  service:
+    name: vault
+    # running / dead
+    status: running
+    # enabled / disabled
+    on_boot_state: enabled
+    # When triggering service after configuration changes use reload instead of restart
+    reload: false
+    # directory where systemd service unit file will be saved
+    systemd:
+      # by default we don't want do not overwrite service file provided by package
+      # but override it completely
+      unit_dir: /etc/systemd/system
+      # default location for unit file installed by package
+      # unit_dir: /usr/lib/systemd/system
+  shell_completion:
+    bash:
+      # Install bash completion configuration
+      install: true
+      package: bash-completion
+      dir: /etc/bash_completion.d
+  binary:
+    # List of packages required for binary installation, i.e. unzip
+    # is required to extract archive with vault binary
+    # NOTE: those packages won't be removed with vault.binary.clean state
+    prereq_pkgs:
+      - unzip
+    # Formula will try download distributive from list of sources:
+    # - %download_local%/%version%/vault_%version%_linux_amd64.zip
+    # - %download_remote%/%version%/vault_%version%_linux_amd64.zip
+    # If you put archive with vault on salt-fileserver i.e.
+    # /fileserver_root/vault/files/1.12.2/vault_1.12.2_linux_amd64.zip
+    # it will be used first, if distributive file is not present on salt-fileserver
+    # %download_remote% will be used as a fallback
+    download_local: salt://vault/files
+    source_hash_local: salt://vault/files
+    download_remote: https://releases.hashicorp.com/vault/
+    # File with SHA sums will be downloaded from  %source_hash_remote%/%version%/vault_%version%_SHA256SUMS
+    # It will only be used if `skip_verify: false` and when distributive is downloaded via http[s]
+    source_hash_remote: https://releases.hashicorp.com/vault/
+    # Skip checksum verification, by default checksum will be verified.
+    # You probably want to disable checksum verification if you download distributive from salt fileserver (salt://...)
+    skip_verify: false
+    # Temp dir for manipulations with archive
+    temp_dir: /tmp/vault
+  package:
+    # List of packages required for packages installation, i.e. python3-dnf-plugin-versionlock
+    # is required on RedHat family to hold packages
+    # NOTE: those packages won't be removed with vault.package.clean state
+    prereq_pkgs: []
+    # List of some extra packages to install
+    # NOTE: those packages won't be removed with vault.package.clean state
+    pkgs_extra: []
+    pkgs:
+      - vault
+    hold: false
+    update_holds: true
+    # only applicable on Debian based systems
+    install_recommends: true
+  # Start parameters (command line arguments) for vault, vault service will be started with this parameters
+  # some parameters have their equivalent in configuration file, it is preferable to put parameters in the config file
+  # rather than as command line arguments
+  params:
+    config-file: /etc/vault.d/vault.json
+  tls:
+    self_signed: false
+    packages:
+      - openssl
+      - python3-m2crypto
+    # If path starts with 'salt://' or '/' value will be used 'as is'
+    # file from salt-fileserver or local file will be used respectively
+    # otherwise file will be searched in 'formula-root/tls/' on salt-fileserver
+    key_file_source: tls.key
+    cert_file_source: tls.crt
+    # Params for self signed certificate
+    cert_params:
+      days_valid: 3650
+      CN: {{ grains.fqdn }}
+  config:
+    env_file: /etc/default/vault
+    source: vault.json.jinja
+    # Don't show diff when updating config file - don't reveal tokens.
+    show_changes: false
+    data:
+      storage:
+        file:
+          path: /var/lib/vault/data
+      # Consul storage example
+      #storage:
+      #  consul:
+      #    path: vault/
+      #    token: your-uuid-here
+      ui: true
+      log_level: info
+      listener:
+        tcp:
+          address: 127.0.0.1:8200
+          # Vault support go-sockaddr templates for addresses
+          # https://pkg.go.dev/github.com/hashicorp/go-sockaddr/template
+          # It's bit messy to work with Go Template inside Jinja
+          # Also Salt have some issues if you put raw Jinja block like this
+          # {% raw %}{{ GetPrivateIP }}:8200{% endraw %}
+          # it will throw error like
+          # yaml.parser.ParserError: while parsing a block mapping ...
+          # so you need to write it like this
+          #address: >-
+          #  {%- raw %}
+          #  {{ GetPrivateIP }}:8200
+          #  {%- endraw %}
+      # Using Go Template with api_addr option
+      #api_addr: >-
+      #  {%- raw %}
+      #  https://{{ GetPrivateIP }}:8200
+      #  {%- endraw %}
+
+
+---
+# Enable HTTPS with self signed certificate
+vault:
+  tls:
+    self_signed: true
+    cert_params:
+      subjectAltName: DNS:vault.example.com, DNS:another.name.tld
+  config:
+    data:
+      listener:
+        tcp:
+          address: 0.0.0.0:8200
+          tls_disable: false
+          # it's mandatory to provide path to key and certificate, otherwise certificate will not be issued
+          tls_key_file: /etc/vault.d/tls.key
+          tls_cert_file: /etc/vault.d/tls.crt
+
+
+---
+# Enable HTTPS with provided local (on minion) certificate
+vault:
+  tls:
+    self_signed: false
+    key_file_source: /etc/pki/api/vault/myminion.key
+    cert_file_source: /etc/pki/api/vault/myminion.crt
+  config:
+    data:
+      listener:
+        tcp:
+          address: 0.0.0.0:8200
+          tls_disable: false
+          # it's mandatory to provide path to key and certificate,
+          # provided key and cert will be copied to tls_key_file and tls_cert_file respectively
+          tls_key_file: /etc/vault.d/tls.key
+          tls_cert_file: /etc/vault.d/tls.crt

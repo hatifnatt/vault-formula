@@ -1,0 +1,37 @@
+# If you do not need to provide defaults via the `os_family` grain,
+# you will need to provide at least an empty dict in this file, e.g.
+# osfamilymap: {}
+---
+Debian:
+  config:
+    env_file: /etc/default/vault
+  repo:
+    prerequisites: []
+    config:
+      name: deb [arch=amd64] https://apt.releases.hashicorp.com {{ grains.oscodename }} main
+      file: /etc/apt/sources.list.d/hashicorp.list
+      key_url: https://apt.releases.hashicorp.com/gpg
+      clean_file: true
+
+RedHat:
+  config:
+    env_file: /etc/sysconfig/vault
+  package:
+    prereq_pkgs:
+      - python3-dnf-plugin-versionlock
+  repo:
+    prerequisites: []
+    config:
+      - name: hashicorp
+        humanname: Hashicorp Stable - $basearch
+        baseurl: https://rpm.releases.hashicorp.com/RHEL/$releasever/$basearch/stable
+        enabled: 1
+        gpgcheck: 1
+        gpgkey: https://rpm.releases.hashicorp.com/gpg
+      # test repo not really required
+      # - name: hashicorp-test
+      #   humanname: Hashicorp Test - $basearch
+      #   baseurl: https://rpm.releases.hashicorp.com/RHEL/$releasever/$basearch/test
+      #   enabled: 0
+      #   gpgcheck: 1
+      #   gpgkey: https://rpm.releases.hashicorp.com/gpg

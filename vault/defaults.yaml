@@ -1,0 +1,72 @@
+default:
+  version: 1.12.2
+  install: false
+  use_upstream: binary # package, repo / binary, archive
+  user: vault
+  group: vault
+  root_user: root
+  root_group: root
+  bin: /usr/bin/vault
+  service:
+    name: vault
+    status: running
+    on_boot_state: enabled
+    reload: false
+    systemd:
+      # do not overwrite service file provided by package
+      # but override it completely
+      unit_dir: /etc/systemd/system
+  shell_completion:
+    bash:
+      install: true
+      package: bash-completion
+      dir: /etc/bash_completion.d
+  binary:
+    prereq_pkgs:
+      - unzip
+    download_local: salt://vault/files
+    source_hash_local: salt://vault/files
+    download_remote: https://releases.hashicorp.com/vault/
+    source_hash_remote: https://releases.hashicorp.com/vault/
+    skip_verify: false
+    temp_dir: /tmp/vault
+  package:
+    prereq_pkgs: []
+    pkgs_extra: []
+    pkgs:
+      - vault
+    hold: false
+    update_holds: true
+    install_recommends: true
+  params:
+    config: /etc/vault.d/vault.json
+  tls:
+    self_signed: false
+    packages:
+      - openssl
+      - python3-m2crypto
+    key_file_source: tls.key
+    cert_file_source: tls.crt
+    cert_params:
+      days_valid: 3650
+      CN: {{ grains.fqdn }}
+  config:
+    source: vault.json.jinja
+    show_changes: false
+    data:
+      storage: {}
+        # file:
+        #   path: /var/lib/vault/data
+      listener:
+        tcp:
+          address: 0.0.0.0:8200
+          tls_disable: false
+          tls_key_file: /etc/vault.d/tls.key
+          tls_cert_file: /etc/vault.d/tls.crt
+      ui: true
+      log_level: info
+      max_lease_ttl: 8760h
+      telemetry:
+        # 12h retention for better calculated metrics ... I think
+        prometheus_retention_time: 12h
+        disable_hostname: true

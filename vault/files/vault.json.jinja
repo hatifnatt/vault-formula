@@ -1,0 +1,2 @@
+{% from tplroot ~ "/map.jinja" import vault as v -%}
+{{ v.config.data|json(indent=2) }}
